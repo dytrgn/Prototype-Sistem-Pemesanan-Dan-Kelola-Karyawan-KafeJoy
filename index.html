@@ -1,0 +1,1255 @@
+<!doctype html>
+<html lang="id">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kopi Joy - Sistem Pemesanan</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <style>
+    body {
+      box-sizing: border-box;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    
+    * {
+      box-sizing: border-box;
+    }
+
+    .btn-primary {
+      transition: all 0.2s ease;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(101, 67, 33, 0.3);
+    }
+    
+    .card {
+      transition: all 0.2s ease;
+    }
+    
+    .card:hover {
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+    }
+    
+    .menu-item:hover {
+      background-color: #f5f1ed;
+    }
+    
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .animate-slide-in {
+      animation: slideIn 0.3s ease-out;
+    }
+    
+    .toast {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 16px 24px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      z-index: 1000;
+      animation: slideIn 0.3s ease-out;
+    }
+    
+    .toast-success {
+      background-color: #4a7c59;
+      color: white;
+    }
+    
+    .toast-error {
+      background-color: #8b4513;
+      color: white;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #654321;
+      box-shadow: 0 0 0 3px rgba(101, 67, 33, 0.1);
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .status-new {
+      background-color: #fef3c7;
+      color: #92400e;
+    }
+
+    .status-process {
+      background-color: #dbeafe;
+      color: #1e40af;
+    }
+
+    .status-done {
+      background-color: #d1fae5;
+      color: #065f46;
+    }
+  </style>
+  <style>@view-transition { navigation: auto; }</style>
+  <script src="/_sdk/data_sdk.js" type="text/javascript"></script>
+ </head>
+ <body class="min-h-full w-full" style="background-color: #f5f1ed; margin: 0; padding: 0;">
+  <div id="app" class="w-full min-h-full"></div>
+  <script>
+    const defaultConfig = {
+      cafe_name: "Kopi Joy",
+      cafe_address: "Telang",
+      cafe_phone: "0812-3456-7890",
+      thank_you_message: "Terima Kasih Atas Kunjungan Anda!",
+      background_color: "#f5f1ed",
+      surface_color: "#ffffff",
+      text_color: "#3e2723",
+      primary_action_color: "#654321",
+      secondary_action_color: "#8b6f47"
+    };
+
+    let currentView = 'role-select';
+    let currentRole = null;
+    let orders = [];
+    let menuItems = [
+      { id: 1, name: 'Espresso', price: 15000, category: 'Kopi' },
+      { id: 2, name: 'Cappuccino', price: 20000, category: 'Kopi' },
+      { id: 3, name: 'Latte', price: 22000, category: 'Kopi' },
+      { id: 4, name: 'Americano', price: 18000, category: 'Kopi' },
+      { id: 5, name: 'Matcha Latte', price: 25000, category: 'Non-Kopi' }
+    ];
+    let employees = [
+      { id: 1, name: 'Budi Santoso', nip: 'K001', position: 'Kasir', status: 'Aktif' },
+      { id: 2, name: 'Ani Wijaya', nip: 'K002', position: 'Kasir', status: 'Aktif' },
+      { id: 3, name: 'Dedi Firmansyah', nip: 'B001', position: 'Barista', status: 'Aktif' },
+      { id: 4, name: 'Siti Nurhaliza', nip: 'B002', position: 'Barista', status: 'Aktif' }
+    ];
+    let transactions = [];
+    let currentOrder = null;
+    let orderCounter = 1;
+
+    function showToast(message, type = 'success') {
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.remove();
+      }, 3000);
+    }
+
+    function formatCurrency(amount) {
+      return new Intl.NumberFormat('id-ID', {
+        style: 'currency',
+        currency: 'IDR',
+        minimumFractionDigits: 0
+      }).format(amount);
+    }
+
+    function renderRoleSelection() {
+      const config = window.elementSdk?.config || defaultConfig;
+      
+      return `
+        <div class="w-full min-h-full flex items-center justify-center" style="padding: 32px; background-color: ${config.background_color || defaultConfig.background_color};">
+          <div class="w-full" style="max-width: 1200px;">
+            <div class="text-center" style="margin-bottom: 48px;">
+              <h1 style="font-size: 48px; font-weight: 700; color: ${config.text_color || defaultConfig.text_color}; margin-bottom: 12px;">${config.cafe_name || defaultConfig.cafe_name}</h1>
+              <p style="font-size: 20px; color: ${config.secondary_action_color || defaultConfig.secondary_action_color};">Sistem Pemesanan Kafe</p>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px;">
+              <div class="card" style="background-color: ${config.surface_color || defaultConfig.surface_color}; border-radius: 16px; padding: 32px; text-align: center; cursor: pointer;" onclick="selectRole('kasir')">
+                <div style="font-size: 64px; margin-bottom: 16px;">👩‍💻</div>
+                <h2 style="font-size: 24px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; margin-bottom: 8px;">Kasir</h2>
+                <p style="color: ${config.secondary_action_color || defaultConfig.secondary_action_color};">Input pesanan & pembayaran</p>
+              </div>
+              
+              <div class="card" style="background-color: ${config.surface_color || defaultConfig.surface_color}; border-radius: 16px; padding: 32px; text-align: center; cursor: pointer;" onclick="selectRole('barista')">
+                <div style="font-size: 64px; margin-bottom: 16px;">👨‍🍳</div>
+                <h2 style="font-size: 24px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; margin-bottom: 8px;">Barista</h2>
+                <p style="color: ${config.secondary_action_color || defaultConfig.secondary_action_color};">Kelola pesanan kopi</p>
+              </div>
+              
+              <div class="card" style="background-color: ${config.surface_color || defaultConfig.surface_color}; border-radius: 16px; padding: 32px; text-align: center; cursor: pointer;" onclick="selectRole('manajer')">
+                <div style="font-size: 64px; margin-bottom: 16px;">💼</div>
+                <h2 style="font-size: 24px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; margin-bottom: 8px;">Manajer</h2>
+                <p style="color: ${config.secondary_action_color || defaultConfig.secondary_action_color};">Kelola data & laporan</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderKasirView() {
+      const config = window.elementSdk?.config || defaultConfig;
+      const activeEmployees = employees.filter(e => e.status === 'Aktif' && e.position === 'Kasir');
+      
+      if (!currentOrder) {
+        currentOrder = {
+          id: orderCounter++,
+          cashier: '',
+          customer: '',
+          items: [],
+          total: 0,
+          status: 'Baru',
+          timestamp: new Date().toISOString()
+        };
+      }
+      
+      return `
+        <div class="w-full min-h-full" style="background-color: ${config.background_color || defaultConfig.background_color};">
+          <div style="background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center;">
+            <h1 style="font-size: 24px; font-weight: 600; margin: 0;">${config.cafe_name || defaultConfig.cafe_name} - Kasir</h1>
+            <button onclick="backToRoleSelect()" style="background-color: rgba(255, 255, 255, 0.2); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 14px;">← Kembali</button>
+          </div>
+          
+          <div style="padding: 24px; max-width: 1400px; margin: 0 auto;">
+            <div style="display: grid; grid-template-columns: 1fr 400px; gap: 24px;">
+              <div>
+                <div class="card" style="background-color: ${config.surface_color || defaultConfig.surface_color}; border-radius: 12px; padding: 24px; margin-bottom: 24px;">
+                  <h2 style="font-size: 20px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; margin-bottom: 20px;">Data Pesanan</h2>
+                  
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+                    <div>
+                      <label for="cashier-select" style="display: block; margin-bottom: 8px; font-weight: 500; color: ${config.text_color || defaultConfig.text_color};">Nama Kasir</label>
+                      <select id="cashier-select" onchange="updateCashier(this.value)" style="width: 100%; padding: 10px 12px; border: 2px solid #e0d5c7; border-radius: 8px; font-size: 14px; background-color: white; color: ${config.text_color || defaultConfig.text_color};">
+                        <option value="">Pilih Kasir</option>
+                        ${activeEmployees.map(emp => `<option value="${emp.name}" ${currentOrder.cashier === emp.name ? 'selected' : ''}>${emp.name}</option>`).join('')}
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label for="customer-name" style="display: block; margin-bottom: 8px; font-weight: 500; color: ${config.text_color || defaultConfig.text_color};">Nama Pelanggan</label>
+                      <input type="text" id="customer-name" value="${currentOrder.customer}" oninput="updateCustomer(this.value)" placeholder="Masukkan nama pelanggan" style="width: 100%; padding: 10px 12px; border: 2px solid #e0d5c7; border-radius: 8px; font-size: 14px;">
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="card" style="background-color: ${config.surface_color || defaultConfig.surface_color}; border-radius: 12px; padding: 24px;">
+                  <h2 style="font-size: 20px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; margin-bottom: 20px;">Daftar Menu</h2>
+                  
+                  <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px;">
+                    ${menuItems.map(item => `
+                      <div class="menu-item" onclick="addItemToOrder(${item.id})" style="padding: 16px; border: 2px solid #e0d5c7; border-radius: 8px; cursor: pointer; text-align: center;">
+                        <div style="font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; margin-bottom: 4px;">${item.name}</div>
+                        <div style="color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; font-size: 14px;">${formatCurrency(item.price)}</div>
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <div class="card" style="background-color: ${config.surface_color || defaultConfig.surface_color}; border-radius: 12px; padding: 24px;">
+                  <h2 style="font-size: 20px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; margin-bottom: 20px;">Pesanan Saat Ini</h2>
+                  
+                  <div id="order-items" style="margin-bottom: 20px; min-height: 200px;">
+                    ${currentOrder.items.length === 0 ? 
+                      `<p style="text-align: center; color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; padding: 40px 0;">Belum ada item</p>` :
+                      currentOrder.items.map((item, index) => `
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #e0d5c7; margin-bottom: 8px;">
+                          <div style="flex: 1;">
+                            <div style="font-weight: 500; color: ${config.text_color || defaultConfig.text_color};">${item.name}</div>
+                            <div style="font-size: 14px; color: ${config.secondary_action_color || defaultConfig.secondary_action_color};">${formatCurrency(item.price)} x ${item.qty}</div>
+                          </div>
+                          <div style="display: flex; align-items: center; gap: 8px;">
+                            <button onclick="decreaseQty(${index})" style="width: 28px; height: 28px; border: none; background-color: #e0d5c7; border-radius: 4px; cursor: pointer; font-weight: 600;">-</button>
+                            <span style="min-width: 20px; text-align: center; font-weight: 600;">${item.qty}</span>
+                            <button onclick="increaseQty(${index})" style="width: 28px; height: 28px; border: none; background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: white; border-radius: 4px; cursor: pointer; font-weight: 600;">+</button>
+                            <button onclick="removeItem(${index})" style="width: 28px; height: 28px; border: none; background-color: #dc3545; color: white; border-radius: 4px; cursor: pointer; margin-left: 8px;">×</button>
+                          </div>
+                        </div>
+                      `).join('')
+                    }
+                  </div>
+                  
+                  <div style="border-top: 2px solid ${config.primary_action_color || defaultConfig.primary_action_color}; padding-top: 16px; margin-top: 16px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                      <span style="font-size: 20px; font-weight: 700; color: ${config.text_color || defaultConfig.text_color};">TOTAL</span>
+                      <span style="font-size: 20px; font-weight: 700; color: ${config.primary_action_color || defaultConfig.primary_action_color};">${formatCurrency(currentOrder.total)}</span>
+                    </div>
+                    
+                    <button onclick="confirmOrder()" class="btn-primary" style="width: 100%; padding: 14px; background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer;">
+                      Konfirmasi Pesanan
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderPaymentView() {
+      const config = window.elementSdk?.config || defaultConfig;
+      
+      return `
+        <div class="w-full min-h-full" style="background-color: ${config.background_color || defaultConfig.background_color};">
+          <div style="background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: white; padding: 16px 24px;">
+            <h1 style="font-size: 24px; font-weight: 600; margin: 0;">Proses Pembayaran</h1>
+          </div>
+          
+          <div style="padding: 24px; max-width: 800px; margin: 0 auto;">
+            <div class="card animate-slide-in" style="background-color: ${config.surface_color || defaultConfig.surface_color}; border-radius: 12px; padding: 32px;">
+              <div style="text-align: center; margin-bottom: 32px;">
+                <div style="font-size: 16px; color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; margin-bottom: 8px;">Total Pembayaran</div>
+                <div style="font-size: 40px; font-weight: 700; color: ${config.primary_action_color || defaultConfig.primary_action_color};">${formatCurrency(currentOrder.total)}</div>
+              </div>
+              
+              <div style="margin-bottom: 24px;">
+                <label style="display: block; margin-bottom: 12px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; font-size: 16px;">Metode Pembayaran</label>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+                  <button onclick="selectPaymentMethod('CASH')" id="btn-cash" style="padding: 16px; border: 2px solid #e0d5c7; background-color: white; border-radius: 8px; cursor: pointer; font-weight: 500; color: ${config.text_color || defaultConfig.text_color};">
+                    💵 CASH
+                  </button>
+                  <button onclick="selectPaymentMethod('QRIS')" id="btn-qris" style="padding: 16px; border: 2px solid #e0d5c7; background-color: white; border-radius: 8px; cursor: pointer; font-weight: 500; color: ${config.text_color || defaultConfig.text_color};">
+                    📱 QRIS
+                  </button>
+                  <button onclick="selectPaymentMethod('E-Wallet')" id="btn-ewallet" style="padding: 16px; border: 2px solid #e0d5c7; background-color: white; border-radius: 8px; cursor: pointer; font-weight: 500; color: ${config.text_color || defaultConfig.text_color};">
+                    💳 E-Wallet
+                  </button>
+                </div>
+              </div>
+              
+              <div id="payment-details" style="margin-bottom: 24px;"></div>
+              
+              <div style="display: flex; gap: 12px;">
+                <button onclick="backToOrder()" style="flex: 1; padding: 14px; background-color: #e0d5c7; color: ${config.text_color || defaultConfig.text_color}; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer;">
+                  ← Kembali
+                </button>
+                <button onclick="processPayment()" id="btn-process-payment" disabled class="btn-primary" style="flex: 2; padding: 14px; background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; opacity: 0.5;">
+                  Proses Pembayaran
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderReceiptView() {
+      const config = window.elementSdk?.config || defaultConfig;
+      const transaction = transactions[transactions.length - 1];
+      
+      return `
+        <div class="w-full min-h-full" style="background-color: ${config.background_color || defaultConfig.background_color}; padding: 24px;">
+          <div style="max-width: 600px; margin: 0 auto;">
+            <div class="card animate-slide-in" style="background-color: white; border-radius: 12px; padding: 32px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+              <div style="text-align: center; margin-bottom: 24px;">
+                <div style="font-size: 32px; font-weight: 700; color: ${config.text_color || defaultConfig.text_color}; margin-bottom: 4px;">${config.cafe_name || defaultConfig.cafe_name}</div>
+                <div style="color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; font-size: 14px;">${config.cafe_address || defaultConfig.cafe_address}</div>
+                <div style="color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; font-size: 14px;">${config.cafe_phone || defaultConfig.cafe_phone}</div>
+              </div>
+              
+              <div style="border-top: 2px dashed #e0d5c7; border-bottom: 2px dashed #e0d5c7; padding: 16px 0; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px;">
+                  <span style="color: ${config.secondary_action_color || defaultConfig.secondary_action_color};">No. Pesanan:</span>
+                  <span style="font-weight: 600; color: ${config.text_color || defaultConfig.text_color};">#${transaction.id}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px;">
+                  <span style="color: ${config.secondary_action_color || defaultConfig.secondary_action_color};">Tanggal:</span>
+                  <span style="color: ${config.text_color || defaultConfig.text_color};">${new Date(transaction.timestamp).toLocaleString('id-ID')}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px;">
+                  <span style="color: ${config.secondary_action_color || defaultConfig.secondary_action_color};">Kasir:</span>
+                  <span style="color: ${config.text_color || defaultConfig.text_color};">${transaction.cashier}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 14px;">
+                  <span style="color: ${config.secondary_action_color || defaultConfig.secondary_action_color};">Pelanggan:</span>
+                  <span style="color: ${config.text_color || defaultConfig.text_color};">${transaction.customer}</span>
+                </div>
+              </div>
+              
+              <div style="margin-bottom: 16px;">
+                ${transaction.items.map(item => `
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <div style="flex: 1;">
+                      <div style="font-weight: 500; color: ${config.text_color || defaultConfig.text_color};">${item.name}</div>
+                      <div style="font-size: 14px; color: ${config.secondary_action_color || defaultConfig.secondary_action_color};">${formatCurrency(item.price)} x ${item.qty}</div>
+                    </div>
+                    <div style="font-weight: 600; color: ${config.text_color || defaultConfig.text_color};">${formatCurrency(item.price * item.qty)}</div>
+                  </div>
+                `).join('')}
+              </div>
+              
+              <div style="border-top: 2px solid ${config.primary_action_color || defaultConfig.primary_action_color}; padding-top: 16px; margin-bottom: 24px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                  <span style="font-size: 18px; font-weight: 700; color: ${config.text_color || defaultConfig.text_color};">TOTAL</span>
+                  <span style="font-size: 18px; font-weight: 700; color: ${config.primary_action_color || defaultConfig.primary_action_color};">${formatCurrency(transaction.total)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 14px; color: ${config.secondary_action_color || defaultConfig.secondary_action_color};">
+                  <span>Metode Pembayaran:</span>
+                  <span style="font-weight: 600;">${transaction.paymentMethod}</span>
+                </div>
+              </div>
+              
+              <div style="text-align: center; padding: 16px; background-color: ${config.background_color || defaultConfig.background_color}; border-radius: 8px; margin-bottom: 24px;">
+                <div style="font-size: 14px; color: ${config.text_color || defaultConfig.text_color}; font-weight: 500;">${config.thank_you_message || defaultConfig.thank_you_message}</div>
+              </div>
+              
+              <div style="display: flex; gap: 12px;">
+                <button onclick="printReceipt()" class="btn-primary" style="flex: 1; padding: 14px; background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer;">
+                  🖨️ Cetak Struk
+                </button>
+                <button onclick="newOrder()" style="flex: 1; padding: 14px; background-color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer;">
+                  Pesanan Baru
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderBaristaView() {
+      const config = window.elementSdk?.config || defaultConfig;
+      const newOrders = orders.filter(o => o.status === 'Baru');
+      const processingOrders = orders.filter(o => o.status === 'Diproses');
+      
+      return `
+        <div class="w-full min-h-full" style="background-color: ${config.background_color || defaultConfig.background_color};">
+          <div style="background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center;">
+            <h1 style="font-size: 24px; font-weight: 600; margin: 0;">${config.cafe_name || defaultConfig.cafe_name} - Barista</h1>
+            <button onclick="backToRoleSelect()" style="background-color: rgba(255, 255, 255, 0.2); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 14px;">← Kembali</button>
+          </div>
+          
+          <div style="padding: 24px; max-width: 1400px; margin: 0 auto;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+              <div>
+                <h2 style="font-size: 20px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; margin-bottom: 16px;">Pesanan Baru</h2>
+                <div style="display: flex; flex-direction: column; gap: 16px;">
+                  ${newOrders.length === 0 ? 
+                    `<div class="card" style="background-color: ${config.surface_color || defaultConfig.surface_color}; border-radius: 12px; padding: 32px; text-align: center;">
+                      <p style="color: ${config.secondary_action_color || defaultConfig.secondary_action_color};">Tidak ada pesanan baru</p>
+                    </div>` :
+                    newOrders.map(order => `
+                      <div class="card animate-slide-in" style="background-color: ${config.surface_color || defaultConfig.surface_color}; border-radius: 12px; padding: 20px;">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+                          <div>
+                            <div style="font-size: 18px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color};">Pesanan #${order.id}</div>
+                            <div style="font-size: 14px; color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; margin-top: 4px;">${order.customer}</div>
+                          </div>
+                          <span class="status-badge status-new">BARU</span>
+                        </div>
+                        
+                        <div style="margin-bottom: 16px;">
+                          ${order.items.map(item => `
+                            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e0d5c7;">
+                              <span style="color: ${config.text_color || defaultConfig.text_color};">${item.name}</span>
+                              <span style="font-weight: 600; color: ${config.text_color || defaultConfig.text_color};">x${item.qty}</span>
+                            </div>
+                          `).join('')}
+                        </div>
+                        
+                        <div style="font-size: 12px; color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; margin-bottom: 12px;">
+                          Waktu: ${new Date(order.timestamp).toLocaleTimeString('id-ID')}
+                        </div>
+                        
+                        <button onclick="startProcessing(${order.id})" class="btn-primary" style="width: 100%; padding: 10px; background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+                          Mulai Proses
+                        </button>
+                      </div>
+                    `).join('')
+                  }
+                </div>
+              </div>
+              
+              <div>
+                <h2 style="font-size: 20px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; margin-bottom: 16px;">Pesanan Dalam Proses</h2>
+                <div style="display: flex; flex-direction: column; gap: 16px;">
+                  ${processingOrders.length === 0 ? 
+                    `<div class="card" style="background-color: ${config.surface_color || defaultConfig.surface_color}; border-radius: 12px; padding: 32px; text-align: center;">
+                      <p style="color: ${config.secondary_action_color || defaultConfig.secondary_action_color};">Tidak ada pesanan diproses</p>
+                    </div>` :
+                    processingOrders.map(order => `
+                      <div class="card animate-slide-in" style="background-color: ${config.surface_color || defaultConfig.surface_color}; border-radius: 12px; padding: 20px;">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+                          <div>
+                            <div style="font-size: 18px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color};">Pesanan #${order.id}</div>
+                            <div style="font-size: 14px; color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; margin-top: 4px;">${order.customer}</div>
+                          </div>
+                          <span class="status-badge status-process">DIPROSES</span>
+                        </div>
+                        
+                        <div style="margin-bottom: 16px;">
+                          ${order.items.map(item => `
+                            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e0d5c7;">
+                              <span style="color: ${config.text_color || defaultConfig.text_color};">${item.name}</span>
+                              <span style="font-weight: 600; color: ${config.text_color || defaultConfig.text_color};">x${item.qty}</span>
+                            </div>
+                          `).join('')}
+                        </div>
+                        
+                        <div style="font-size: 12px; color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; margin-bottom: 12px;">
+                          Waktu: ${new Date(order.timestamp).toLocaleTimeString('id-ID')}
+                        </div>
+                        
+                        <button onclick="completeOrder(${order.id})" class="btn-primary" style="width: 100%; padding: 10px; background-color: #4a7c59; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+                          ✓ Tandai Selesai
+                        </button>
+                      </div>
+                    `).join('')
+                  }
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderManajerView() {
+      const config = window.elementSdk?.config || defaultConfig;
+      
+      return `
+        <div class="w-full min-h-full" style="background-color: ${config.background_color || defaultConfig.background_color};">
+          <div style="background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center;">
+            <h1 style="font-size: 24px; font-weight: 600; margin: 0;">${config.cafe_name || defaultConfig.cafe_name} - Manajer</h1>
+            <button onclick="backToRoleSelect()" style="background-color: rgba(255, 255, 255, 0.2); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 14px;">← Kembali</button>
+          </div>
+          
+          <div style="padding: 24px;">
+            <div style="display: flex; gap: 12px; margin-bottom: 24px; overflow-x: auto;">
+              <button onclick="showManagerTab('menu')" id="tab-menu" style="padding: 12px 24px; background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap;">
+                📋 Kelola Menu
+              </button>
+              <button onclick="showManagerTab('transactions')" id="tab-transactions" style="padding: 12px 24px; background-color: ${config.surface_color || defaultConfig.surface_color}; color: ${config.text_color || defaultConfig.text_color}; border: 2px solid #e0d5c7; border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap;">
+                💰 Data Transaksi
+              </button>
+              <button onclick="showManagerTab('employees')" id="tab-employees" style="padding: 12px 24px; background-color: ${config.surface_color || defaultConfig.surface_color}; color: ${config.text_color || defaultConfig.text_color}; border: 2px solid #e0d5c7; border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap;">
+                👥 Kelola Karyawan
+              </button>
+              <button onclick="showManagerTab('reports')" id="tab-reports" style="padding: 12px 24px; background-color: ${config.surface_color || defaultConfig.surface_color}; color: ${config.text_color || defaultConfig.text_color}; border: 2px solid #e0d5c7; border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap;">
+                📊 Laporan
+              </button>
+            </div>
+            
+            <div id="manager-content"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderMenuManagement() {
+      const config = window.elementSdk?.config || defaultConfig;
+      
+      return `
+        <div class="card animate-slide-in" style="background-color: ${config.surface_color || defaultConfig.surface_color}; border-radius: 12px; padding: 24px; max-width: 1200px;">
+          <h2 style="font-size: 20px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; margin-bottom: 20px;">Kelola Menu</h2>
+          
+          <div style="margin-bottom: 24px;">
+            <h3 style="font-size: 16px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; margin-bottom: 12px;">Tambah Menu Baru</h3>
+            <div style="display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 12px; align-items: end;">
+              <div>
+                <label for="new-menu-name" style="display: block; margin-bottom: 6px; font-size: 14px; color: ${config.text_color || defaultConfig.text_color};">Nama Menu</label>
+                <input type="text" id="new-menu-name" placeholder="Contoh: Cold Brew" style="width: 100%; padding: 10px 12px; border: 2px solid #e0d5c7; border-radius: 8px; font-size: 14px;">
+              </div>
+              <div>
+                <label for="new-menu-price" style="display: block; margin-bottom: 6px; font-size: 14px; color: ${config.text_color || defaultConfig.text_color};">Harga</label>
+                <input type="number" id="new-menu-price" placeholder="25000" style="width: 100%; padding: 10px 12px; border: 2px solid #e0d5c7; border-radius: 8px; font-size: 14px;">
+              </div>
+              <div>
+                <label for="new-menu-category" style="display: block; margin-bottom: 6px; font-size: 14px; color: ${config.text_color || defaultConfig.text_color};">Kategori</label>
+                <input type="text" id="new-menu-category" placeholder="Kopi" style="width: 100%; padding: 10px 12px; border: 2px solid #e0d5c7; border-radius: 8px; font-size: 14px;">
+              </div>
+              <button onclick="addNewMenu()" class="btn-primary" style="padding: 10px 24px; background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+                + Tambah
+              </button>
+            </div>
+          </div>
+          
+          <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse;">
+              <thead>
+                <tr style="background-color: ${config.background_color || defaultConfig.background_color};">
+                  <th style="padding: 12px; text-align: left; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; border-bottom: 2px solid #e0d5c7;">Nama Menu</th>
+                  <th style="padding: 12px; text-align: left; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; border-bottom: 2px solid #e0d5c7;">Harga</th>
+                  <th style="padding: 12px; text-align: left; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; border-bottom: 2px solid #e0d5c7;">Kategori</th>
+                  <th style="padding: 12px; text-align: center; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; border-bottom: 2px solid #e0d5c7;">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="menu-table-body">
+                ${menuItems.map(item => `
+                  <tr style="border-bottom: 1px solid #e0d5c7;">
+                    <td style="padding: 12px; color: ${config.text_color || defaultConfig.text_color};">${item.name}</td>
+                    <td style="padding: 12px; color: ${config.text_color || defaultConfig.text_color};">${formatCurrency(item.price)}</td>
+                    <td style="padding: 12px; color: ${config.secondary_action_color || defaultConfig.secondary_action_color};">${item.category}</td>
+                    <td style="padding: 12px; text-align: center;">
+                      <button onclick="editMenu(${item.id})" style="padding: 6px 12px; background-color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; color: white; border: none; border-radius: 6px; cursor: pointer; margin-right: 8px; font-size: 14px;">Edit</button>
+                      <button onclick="deleteMenu(${item.id})" style="padding: 6px 12px; background-color: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">×</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderTransactionManagement() {
+      const config = window.elementSdk?.config || defaultConfig;
+      
+      return `
+        <div class="card animate-slide-in" style="background-color: ${config.surface_color || defaultConfig.surface_color}; border-radius: 12px; padding: 24px; max-width: 1400px;">
+          <h2 style="font-size: 20px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; margin-bottom: 20px;">Data Transaksi</h2>
+          
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 24px;">
+            <div>
+              <label for="filter-date-from" style="display: block; margin-bottom: 6px; font-size: 14px; color: ${config.text_color || defaultConfig.text_color};">Dari Tanggal</label>
+              <input type="date" id="filter-date-from" style="width: 100%; padding: 10px 12px; border: 2px solid #e0d5c7; border-radius: 8px; font-size: 14px;">
+            </div>
+            <div>
+              <label for="filter-date-to" style="display: block; margin-bottom: 6px; font-size: 14px; color: ${config.text_color || defaultConfig.text_color};">Sampai Tanggal</label>
+              <input type="date" id="filter-date-to" style="width: 100%; padding: 10px 12px; border: 2px solid #e0d5c7; border-radius: 8px; font-size: 14px;">
+            </div>
+            <div>
+              <label for="filter-payment" style="display: block; margin-bottom: 6px; font-size: 14px; color: ${config.text_color || defaultConfig.text_color};">Metode Bayar</label>
+              <select id="filter-payment" style="width: 100%; padding: 10px 12px; border: 2px solid #e0d5c7; border-radius: 8px; font-size: 14px; background-color: white;">
+                <option value="">Semua</option>
+                <option value="CASH">CASH</option>
+                <option value="QRIS">QRIS</option>
+                <option value="E-Wallet">E-Wallet</option>
+              </select>
+            </div>
+            <div style="display: flex; align-items: end; gap: 8px;">
+              <button onclick="filterTransactions()" class="btn-primary" style="flex: 1; padding: 10px; background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+                Filter
+              </button>
+              <button onclick="exportData()" style="padding: 10px 16px; background-color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+                📥 Ekspor
+              </button>
+            </div>
+          </div>
+          
+          <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse;">
+              <thead>
+                <tr style="background-color: ${config.background_color || defaultConfig.background_color};">
+                  <th style="padding: 12px; text-align: left; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; border-bottom: 2px solid #e0d5c7;">ID</th>
+                  <th style="padding: 12px; text-align: left; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; border-bottom: 2px solid #e0d5c7;">Tanggal</th>
+                  <th style="padding: 12px; text-align: left; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; border-bottom: 2px solid #e0d5c7;">Kasir</th>
+                  <th style="padding: 12px; text-align: left; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; border-bottom: 2px solid #e0d5c7;">Pelanggan</th>
+                  <th style="padding: 12px; text-align: right; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; border-bottom: 2px solid #e0d5c7;">Total</th>
+                  <th style="padding: 12px; text-align: center; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; border-bottom: 2px solid #e0d5c7;">Metode</th>
+                  <th style="padding: 12px; text-align: center; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; border-bottom: 2px solid #e0d5c7;">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${transactions.length === 0 ? 
+                  `<tr><td colspan="7" style="padding: 32px; text-align: center; color: ${config.secondary_action_color || defaultConfig.secondary_action_color};">Belum ada transaksi</td></tr>` :
+                  transactions.map(trans => `
+                    <tr style="border-bottom: 1px solid #e0d5c7;">
+                      <td style="padding: 12px; color: ${config.text_color || defaultConfig.text_color}; font-weight: 600;">#${trans.id}</td>
+                      <td style="padding: 12px; color: ${config.text_color || defaultConfig.text_color}; font-size: 14px;">${new Date(trans.timestamp).toLocaleDateString('id-ID')}</td>
+                      <td style="padding: 12px; color: ${config.text_color || defaultConfig.text_color};">${trans.cashier}</td>
+                      <td style="padding: 12px; color: ${config.text_color || defaultConfig.text_color};">${trans.customer}</td>
+                      <td style="padding: 12px; text-align: right; font-weight: 600; color: ${config.primary_action_color || defaultConfig.primary_action_color};">${formatCurrency(trans.total)}</td>
+                      <td style="padding: 12px; text-align: center; font-size: 14px; color: ${config.secondary_action_color || defaultConfig.secondary_action_color};">${trans.paymentMethod}</td>
+                      <td style="padding: 12px; text-align: center;"><span class="status-badge status-done">SELESAI</span></td>
+                    </tr>
+                  `).join('')
+                }
+              </tbody>
+            </table>
+          </div>
+          
+          ${transactions.length > 0 ? `
+            <div style="margin-top: 24px; padding: 16px; background-color: ${config.background_color || defaultConfig.background_color}; border-radius: 8px;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 600; color: ${config.text_color || defaultConfig.text_color};">Total Pendapatan:</span>
+                <span style="font-size: 24px; font-weight: 700; color: ${config.primary_action_color || defaultConfig.primary_action_color};">
+                  ${formatCurrency(transactions.reduce((sum, t) => sum + t.total, 0))}
+                </span>
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    function renderEmployeeManagement() {
+      const config = window.elementSdk?.config || defaultConfig;
+      
+      return `
+        <div class="card animate-slide-in" style="background-color: ${config.surface_color || defaultConfig.surface_color}; border-radius: 12px; padding: 24px; max-width: 1200px;">
+          <h2 style="font-size: 20px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; margin-bottom: 20px;">Kelola Data Karyawan</h2>
+          
+          <div style="display: grid; grid-template-columns: 1fr auto; gap: 12px; margin-bottom: 24px;">
+            <input type="text" id="search-employee" placeholder="Cari karyawan (Nama/NIP)..." style="padding: 10px 12px; border: 2px solid #e0d5c7; border-radius: 8px; font-size: 14px;">
+            <select id="filter-position" style="padding: 10px 12px; border: 2px solid #e0d5c7; border-radius: 8px; font-size: 14px; background-color: white;">
+              <option value="">Semua Jabatan</option>
+              <option value="Kasir">Kasir</option>
+              <option value="Barista">Barista</option>
+              <option value="Manajer">Manajer</option>
+            </select>
+          </div>
+          
+          <div style="margin-bottom: 24px;">
+            <button onclick="showAddEmployeeForm()" class="btn-primary" style="padding: 12px 24px; background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+              + Tambah Karyawan
+            </button>
+          </div>
+          
+          <div id="employee-form" style="display: none; margin-bottom: 24px; padding: 20px; background-color: ${config.background_color || defaultConfig.background_color}; border-radius: 8px;">
+            <h3 style="font-size: 16px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; margin-bottom: 16px;">Form Karyawan</h3>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+              <div>
+                <label for="emp-name" style="display: block; margin-bottom: 6px; font-size: 14px; color: ${config.text_color || defaultConfig.text_color};">Nama Lengkap</label>
+                <input type="text" id="emp-name" placeholder="Nama karyawan" style="width: 100%; padding: 10px 12px; border: 2px solid #e0d5c7; border-radius: 8px; font-size: 14px;">
+              </div>
+              <div>
+                <label for="emp-nip" style="display: block; margin-bottom: 6px; font-size: 14px; color: ${config.text_color || defaultConfig.text_color};">NIP</label>
+                <input type="text" id="emp-nip" placeholder="Nomor Induk" style="width: 100%; padding: 10px 12px; border: 2px solid #e0d5c7; border-radius: 8px; font-size: 14px;">
+              </div>
+              <div>
+                <label for="emp-position" style="display: block; margin-bottom: 6px; font-size: 14px; color: ${config.text_color || defaultConfig.text_color};">Jabatan</label>
+                <select id="emp-position" style="width: 100%; padding: 10px 12px; border: 2px solid #e0d5c7; border-radius: 8px; font-size: 14px; background-color: white;">
+                  <option value="Kasir">Kasir</option>
+                  <option value="Barista">Barista</option>
+                  <option value="Manajer">Manajer</option>
+                </select>
+              </div>
+              <div>
+                <label for="emp-status" style="display: block; margin-bottom: 6px; font-size: 14px; color: ${config.text_color || defaultConfig.text_color};">Status</label>
+                <select id="emp-status" style="width: 100%; padding: 10px 12px; border: 2px solid #e0d5c7; border-radius: 8px; font-size: 14px; background-color: white;">
+                  <option value="Aktif">Aktif</option>
+                  <option value="Tidak Aktif">Tidak Aktif</option>
+                </select>
+              </div>
+            </div>
+            <div style="display: flex; gap: 12px; margin-top: 16px;">
+              <button onclick="saveEmployee()" class="btn-primary" style="flex: 1; padding: 10px; background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+                Simpan
+              </button>
+              <button onclick="cancelEmployeeForm()" style="flex: 1; padding: 10px; background-color: #e0d5c7; color: ${config.text_color || defaultConfig.text_color}; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+                Batal
+              </button>
+            </div>
+          </div>
+          
+          <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse;">
+              <thead>
+                <tr style="background-color: ${config.background_color || defaultConfig.background_color};">
+                  <th style="padding: 12px; text-align: left; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; border-bottom: 2px solid #e0d5c7;">ID</th>
+                  <th style="padding: 12px; text-align: left; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; border-bottom: 2px solid #e0d5c7;">Nama</th>
+                  <th style="padding: 12px; text-align: left; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; border-bottom: 2px solid #e0d5c7;">NIP</th>
+                  <th style="padding: 12px; text-align: left; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; border-bottom: 2px solid #e0d5c7;">Jabatan</th>
+                  <th style="padding: 12px; text-align: center; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; border-bottom: 2px solid #e0d5c7;">Status</th>
+                  <th style="padding: 12px; text-align: center; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; border-bottom: 2px solid #e0d5c7;">Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${employees.map(emp => `
+                  <tr style="border-bottom: 1px solid #e0d5c7;">
+                    <td style="padding: 12px; color: ${config.text_color || defaultConfig.text_color}; font-weight: 600;">${emp.id}</td>
+                    <td style="padding: 12px; color: ${config.text_color || defaultConfig.text_color};">${emp.name}</td>
+                    <td style="padding: 12px; color: ${config.secondary_action_color || defaultConfig.secondary_action_color};">${emp.nip}</td>
+                    <td style="padding: 12px; color: ${config.text_color || defaultConfig.text_color};">${emp.position}</td>
+                    <td style="padding: 12px; text-align: center;">
+                      <span class="status-badge ${emp.status === 'Aktif' ? 'status-done' : 'status-new'}">${emp.status.toUpperCase()}</span>
+                    </td>
+                    <td style="padding: 12px; text-align: center;">
+                      <button onclick="editEmployee(${emp.id})" style="padding: 6px 12px; background-color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; color: white; border: none; border-radius: 6px; cursor: pointer; margin-right: 8px; font-size: 14px;">Edit</button>
+                      <button onclick="deleteEmployee(${emp.id})" style="padding: 6px 12px; background-color: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">Hapus</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderReports() {
+      const config = window.elementSdk?.config || defaultConfig;
+      const totalRevenue = transactions.reduce((sum, t) => sum + t.total, 0);
+      const todayRevenue = transactions.filter(t => 
+        new Date(t.timestamp).toDateString() === new Date().toDateString()
+      ).reduce((sum, t) => sum + t.total, 0);
+      
+      return `
+        <div class="card animate-slide-in" style="background-color: ${config.surface_color || defaultConfig.surface_color}; border-radius: 12px; padding: 24px; max-width: 1200px;">
+          <h2 style="font-size: 20px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; margin-bottom: 20px;">Laporan</h2>
+          
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 24px;">
+            <div style="padding: 20px; background-color: ${config.background_color || defaultConfig.background_color}; border-radius: 8px;">
+              <div style="font-size: 14px; color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; margin-bottom: 8px;">Pendapatan Hari Ini</div>
+              <div style="font-size: 28px; font-weight: 700; color: ${config.primary_action_color || defaultConfig.primary_action_color};">${formatCurrency(todayRevenue)}</div>
+            </div>
+            
+            <div style="padding: 20px; background-color: ${config.background_color || defaultConfig.background_color}; border-radius: 8px;">
+              <div style="font-size: 14px; color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; margin-bottom: 8px;">Total Pendapatan</div>
+              <div style="font-size: 28px; font-weight: 700; color: ${config.primary_action_color || defaultConfig.primary_action_color};">${formatCurrency(totalRevenue)}</div>
+            </div>
+            
+            <div style="padding: 20px; background-color: ${config.background_color || defaultConfig.background_color}; border-radius: 8px;">
+              <div style="font-size: 14px; color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; margin-bottom: 8px;">Total Transaksi</div>
+              <div style="font-size: 28px; font-weight: 700; color: ${config.primary_action_color || defaultConfig.primary_action_color};">${transactions.length}</div>
+            </div>
+          </div>
+          
+          <div style="margin-bottom: 24px;">
+            <h3 style="font-size: 16px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; margin-bottom: 12px;">Filter Laporan</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+              <select id="report-type" style="padding: 10px 12px; border: 2px solid #e0d5c7; border-radius: 8px; font-size: 14px; background-color: white;">
+                <option value="daily">Penjualan Harian</option>
+                <option value="monthly">Penjualan Bulanan</option>
+                <option value="revenue">Pendapatan</option>
+                <option value="bestseller">Menu Terlaris</option>
+              </select>
+              
+              <select id="report-period" style="padding: 10px 12px; border: 2px solid #e0d5c7; border-radius: 8px; font-size: 14px; background-color: white;">
+                <option value="today">Hari Ini</option>
+                <option value="month">Bulan Ini</option>
+                <option value="custom">Custom</option>
+              </select>
+              
+              <button onclick="generateReport()" class="btn-primary" style="padding: 10px 24px; background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+                Generate Laporan
+              </button>
+            </div>
+          </div>
+          
+          <div style="display: flex; gap: 12px;">
+            <button onclick="printReport()" style="flex: 1; padding: 12px; background-color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+              🖨️ Cetak Laporan
+            </button>
+            <button onclick="savePDF()" style="flex: 1; padding: 12px; background-color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+              📥 Simpan PDF
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    function selectRole(role) {
+      currentRole = role;
+      currentView = role;
+      render();
+    }
+
+    function backToRoleSelect() {
+      currentRole = null;
+      currentView = 'role-select';
+      currentOrder = null;
+      render();
+    }
+
+    function updateCashier(value) {
+      currentOrder.cashier = value;
+    }
+
+    function updateCustomer(value) {
+      currentOrder.customer = value;
+    }
+
+    function addItemToOrder(menuId) {
+      const menuItem = menuItems.find(m => m.id === menuId);
+      const existingItem = currentOrder.items.find(i => i.id === menuId);
+      
+      if (existingItem) {
+        existingItem.qty++;
+      } else {
+        currentOrder.items.push({
+          id: menuItem.id,
+          name: menuItem.name,
+          price: menuItem.price,
+          qty: 1
+        });
+      }
+      
+      currentOrder.total = currentOrder.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
+      render();
+    }
+
+    function increaseQty(index) {
+      currentOrder.items[index].qty++;
+      currentOrder.total = currentOrder.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
+      render();
+    }
+
+    function decreaseQty(index) {
+      if (currentOrder.items[index].qty > 1) {
+        currentOrder.items[index].qty--;
+        currentOrder.total = currentOrder.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
+        render();
+      }
+    }
+
+    function removeItem(index) {
+      currentOrder.items.splice(index, 1);
+      currentOrder.total = currentOrder.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
+      render();
+    }
+
+    function confirmOrder() {
+      if (!currentOrder.cashier) {
+        showToast('Pilih kasir terlebih dahulu', 'error');
+        return;
+      }
+      if (!currentOrder.customer) {
+        showToast('Masukkan nama pelanggan', 'error');
+        return;
+      }
+      if (currentOrder.items.length === 0) {
+        showToast('Tambahkan minimal 1 item', 'error');
+        return;
+      }
+      
+      currentView = 'payment';
+      render();
+    }
+
+    function backToOrder() {
+      currentView = 'kasir';
+      render();
+    }
+
+    function selectPaymentMethod(method) {
+      const config = window.elementSdk?.config || defaultConfig;
+      currentOrder.paymentMethod = method;
+      
+      const buttons = ['btn-cash', 'btn-qris', 'btn-ewallet'];
+      buttons.forEach(btn => {
+        const element = document.getElementById(btn);
+        if (element) {
+          element.style.backgroundColor = 'white';
+          element.style.borderColor = '#e0d5c7';
+        }
+      });
+      
+      const selectedBtn = document.getElementById(`btn-${method.toLowerCase().replace('-', '')}`);
+      if (selectedBtn) {
+        selectedBtn.style.backgroundColor = config.primary_action_color || defaultConfig.primary_action_color;
+        selectedBtn.style.color = 'white';
+        selectedBtn.style.borderColor = config.primary_action_color || defaultConfig.primary_action_color;
+      }
+      
+      const detailsDiv = document.getElementById('payment-details');
+      if (method === 'CASH') {
+        detailsDiv.innerHTML = `
+          <div>
+            <label for="cash-amount" style="display: block; margin-bottom: 8px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color};">Nominal Uang</label>
+            <input type="number" id="cash-amount" oninput="calculateChange()" placeholder="Masukkan nominal" style="width: 100%; padding: 12px; border: 2px solid #e0d5c7; border-radius: 8px; font-size: 16px; margin-bottom: 12px;">
+            <div id="change-display" style="padding: 12px; background-color: ${config.background_color || defaultConfig.background_color}; border-radius: 8px; font-size: 16px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color};"></div>
+          </div>
+        `;
+      } else if (method === 'QRIS') {
+        detailsDiv.innerHTML = `
+          <div style="text-align: center; padding: 20px; background-color: ${config.background_color || defaultConfig.background_color}; border-radius: 8px;">
+            <div style="font-size: 64px; margin-bottom: 12px;">📱</div>
+            <div style="font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; margin-bottom: 8px;">Scan QR Code</div>
+            <div style="width: 200px; height: 200px; background-color: white; border: 2px solid #e0d5c7; border-radius: 8px; margin: 0 auto; display: flex; align-items: center; justify-content: center;">
+              <div style="font-size: 14px; color: ${config.secondary_action_color || defaultConfig.secondary_action_color};">QR Code ${formatCurrency(currentOrder.total)}</div>
+            </div>
+          </div>
+        `;
+        document.getElementById('btn-process-payment').disabled = false;
+        document.getElementById('btn-process-payment').style.opacity = '1';
+      } else {
+        detailsDiv.innerHTML = `
+          <div style="text-align: center; padding: 20px; background-color: ${config.background_color || defaultConfig.background_color}; border-radius: 8px;">
+            <div style="font-size: 64px; margin-bottom: 12px;">💳</div>
+            <div style="font-weight: 600; color: ${config.text_color || defaultConfig.text_color}; margin-bottom: 8px;">E-Wallet / Debit</div>
+            <div style="color: ${config.secondary_action_color || defaultConfig.secondary_action_color};">Gunakan mesin EDC untuk melanjutkan</div>
+          </div>
+        `;
+        document.getElementById('btn-process-payment').disabled = false;
+        document.getElementById('btn-process-payment').style.opacity = '1';
+      }
+    }
+
+    function calculateChange() {
+      const config = window.elementSdk?.config || defaultConfig;
+      const cashAmount = parseFloat(document.getElementById('cash-amount').value) || 0;
+      const change = cashAmount - currentOrder.total;
+      const changeDisplay = document.getElementById('change-display');
+      const processBtn = document.getElementById('btn-process-payment');
+      
+      if (change >= 0) {
+        changeDisplay.innerHTML = `Kembalian: <span style="color: ${config.primary_action_color || defaultConfig.primary_action_color};">${formatCurrency(change)}</span>`;
+        processBtn.disabled = false;
+        processBtn.style.opacity = '1';
+      } else {
+        changeDisplay.innerHTML = `<span style="color: #dc3545;">Nominal kurang ${formatCurrency(Math.abs(change))}</span>`;
+        processBtn.disabled = true;
+        processBtn.style.opacity = '0.5';
+      }
+    }
+
+    function processPayment() {
+      orders.push({...currentOrder});
+      transactions.push({...currentOrder});
+      
+      showToast('Pembayaran Berhasil!', 'success');
+      currentView = 'receipt';
+      render();
+    }
+
+    function printReceipt() {
+      showToast('Struk sedang dicetak...', 'success');
+    }
+
+    function newOrder() {
+      currentOrder = null;
+      currentView = 'kasir';
+      render();
+    }
+
+    function startProcessing(orderId) {
+      const order = orders.find(o => o.id === orderId);
+      if (order) {
+        order.status = 'Diproses';
+        showToast(`Pesanan #${orderId} mulai diproses`, 'success');
+        render();
+      }
+    }
+
+    function completeOrder(orderId) {
+      const orderIndex = orders.findIndex(o => o.id === orderId);
+      if (orderIndex !== -1) {
+        orders[orderIndex].status = 'Selesai';
+        showToast(`Pesanan #${orderId} selesai!`, 'success');
+        render();
+      }
+    }
+
+    function showManagerTab(tab) {
+      const config = window.elementSdk?.config || defaultConfig;
+      const tabs = ['menu', 'transactions', 'employees', 'reports'];
+      tabs.forEach(t => {
+        const btn = document.getElementById(`tab-${t}`);
+        if (btn) {
+          if (t === tab) {
+            btn.style.backgroundColor = config.primary_action_color || defaultConfig.primary_action_color;
+            btn.style.color = 'white';
+            btn.style.border = 'none';
+          } else {
+            btn.style.backgroundColor = config.surface_color || defaultConfig.surface_color;
+            btn.style.color = config.text_color || defaultConfig.text_color;
+            btn.style.border = '2px solid #e0d5c7';
+          }
+        }
+      });
+      
+      const content = document.getElementById('manager-content');
+      if (content) {
+        if (tab === 'menu') {
+          content.innerHTML = renderMenuManagement();
+        } else if (tab === 'transactions') {
+          content.innerHTML = renderTransactionManagement();
+        } else if (tab === 'employees') {
+          content.innerHTML = renderEmployeeManagement();
+        } else if (tab === 'reports') {
+          content.innerHTML = renderReports();
+        }
+      }
+    }
+
+    function addNewMenu() {
+      const name = document.getElementById('new-menu-name').value;
+      const price = parseFloat(document.getElementById('new-menu-price').value);
+      const category = document.getElementById('new-menu-category').value;
+      
+      if (!name || !price || !category) {
+        showToast('Lengkapi semua field', 'error');
+        return;
+      }
+      
+      const newId = Math.max(...menuItems.map(m => m.id)) + 1;
+      menuItems.push({ id: newId, name, price, category });
+      
+      document.getElementById('new-menu-name').value = '';
+      document.getElementById('new-menu-price').value = '';
+      document.getElementById('new-menu-category').value = '';
+      
+      showToast('Menu berhasil ditambahkan', 'success');
+      showManagerTab('menu');
+    }
+
+    function editMenu(menuId) {
+      showToast('Fitur edit menu', 'success');
+    }
+
+    function deleteMenu(menuId) {
+      const index = menuItems.findIndex(m => m.id === menuId);
+      if (index !== -1) {
+        menuItems.splice(index, 1);
+        showToast('Menu berhasil dihapus', 'success');
+        showManagerTab('menu');
+      }
+    }
+
+    function filterTransactions() {
+      showToast('Filter transaksi diterapkan', 'success');
+    }
+
+    function exportData() {
+      showToast('Data sedang diekspor...', 'success');
+    }
+
+    function showAddEmployeeForm() {
+      const form = document.getElementById('employee-form');
+      if (form) {
+        form.style.display = 'block';
+        document.getElementById('emp-name').value = '';
+        document.getElementById('emp-nip').value = '';
+      }
+    }
+
+    function cancelEmployeeForm() {
+      const form = document.getElementById('employee-form');
+      if (form) {
+        form.style.display = 'none';
+      }
+    }
+
+    function saveEmployee() {
+      const name = document.getElementById('emp-name').value;
+      const nip = document.getElementById('emp-nip').value;
+      const position = document.getElementById('emp-position').value;
+      const status = document.getElementById('emp-status').value;
+      
+      if (!name || !nip) {
+        showToast('Nama dan NIP wajib diisi', 'error');
+        return;
+      }
+      
+      const newId = Math.max(...employees.map(e => e.id)) + 1;
+      employees.push({ id: newId, name, nip, position, status });
+      
+      showToast('Karyawan berhasil ditambahkan', 'success');
+      cancelEmployeeForm();
+      showManagerTab('employees');
+    }
+
+    function editEmployee(empId) {
+      showToast('Fitur edit karyawan', 'success');
+    }
+
+    function deleteEmployee(empId) {
+      const index = employees.findIndex(e => e.id === empId);
+      if (index !== -1) {
+        employees.splice(index, 1);
+        showToast('Karyawan berhasil dihapus', 'success');
+        showManagerTab('employees');
+      }
+    }
+
+    function generateReport() {
+      showToast('Laporan berhasil digenerate', 'success');
+    }
+
+    function printReport() {
+      showToast('Laporan sedang dicetak...', 'success');
+    }
+
+    function savePDF() {
+      showToast('Menyimpan laporan sebagai PDF...', 'success');
+    }
+
+    function render() {
+      const app = document.getElementById('app');
+      if (!app) return;
+      
+      let html = '';
+      
+      if (currentView === 'role-select') {
+        html = renderRoleSelection();
+      } else if (currentView === 'kasir') {
+        html = renderKasirView();
+      } else if (currentView === 'payment') {
+        html = renderPaymentView();
+      } else if (currentView === 'receipt') {
+        html = renderReceiptView();
+      } else if (currentView === 'barista') {
+        html = renderBaristaView();
+      } else if (currentView === 'manajer') {
+        html = renderManajerView();
+        setTimeout(() => showManagerTab('menu'), 0);
+      }
+      
+      app.innerHTML = html;
+    }
+
+    async function onConfigChange(config) {
+      render();
+    }
+
+    if (window.elementSdk) {
+      window.elementSdk.init({
+        defaultConfig,
+        onConfigChange,
+        mapToCapabilities: (config) => ({
+          recolorables: [
+            {
+              get: () => config.background_color || defaultConfig.background_color,
+              set: (value) => {
+                config.background_color = value;
+                window.elementSdk.setConfig({ background_color: value });
+              }
+            },
+            {
+              get: () => config.surface_color || defaultConfig.surface_color,
+              set: (value) => {
+                config.surface_color = value;
+                window.elementSdk.setConfig({ surface_color: value });
+              }
+            },
+            {
+              get: () => config.text_color || defaultConfig.text_color,
+              set: (value) => {
+                config.text_color = value;
+                window.elementSdk.setConfig({ text_color: value });
+              }
+            },
+            {
+              get: () => config.primary_action_color || defaultConfig.primary_action_color,
+              set: (value) => {
+                config.primary_action_color = value;
+                window.elementSdk.setConfig({ primary_action_color: value });
+              }
+            },
+            {
+              get: () => config.secondary_action_color || defaultConfig.secondary_action_color,
+              set: (value) => {
+                config.secondary_action_color = value;
+                window.elementSdk.setConfig({ secondary_action_color: value });
+              }
+            }
+          ],
+          borderables: [],
+          fontEditable: undefined,
+          fontSizeable: undefined
+        }),
+        mapToEditPanelValues: (config) => new Map([
+          ["cafe_name", config.cafe_name || defaultConfig.cafe_name],
+          ["cafe_address", config.cafe_address || defaultConfig.cafe_address],
+          ["cafe_phone", config.cafe_phone || defaultConfig.cafe_phone],
+          ["thank_you_message", config.thank_you_message || defaultConfig.thank_you_message]
+        ])
+      });
+    }
+
+    render();
+  </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9a70c70ef103b907',t:'MTc2NDU3MzE2MS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
